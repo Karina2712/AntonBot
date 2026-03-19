@@ -1,0 +1,187 @@
+🚀 AntonBot - Telegram бот для тату-студии Антона
+
+🤖 Telegram Bot | 🎨 Идеи тату+ YandexGPT | 📅 Запись к мастеру |
+ |👨‍💼 Админ-панель | Контакты+Информация |
+ | Python 3.11+ | SQLite
+
+
+✨ Возможности
+Клиент	                                      Админ
+🎨 Поиск идей тату (Pinterest + YandexGPT)	📊 Полная статистика
+📅 Быстрая запись	                        ➕ Добавление клиентов
+💬 Чат с мастером	                         📢 Массовые рассылки Акций
+📞 Контакты                                       📅 Напоминание для клиентов о записи
+❓ Вопрос Мастеру           	                 👥 Список записей
+	                                         ✏️ Редактирование шаблонов
+	                                         
+
+Быстрый запуск:
+bash
+git clone <repo> && cd anton-bot
+pip install -r requirements.txt
+cp .env.example .env  # Настроить TOKEN
+python main.py
+Демо: /start → 🎨 Записаться → 💡 Идея тату → 🤲 Рука → роза
+
+ Архитектура проекта
+
+main.py
+├── 📦 src/
+│   ├── config/settings.py     # .env → Settings
+│   ├── core/bot.py           # 🤖 AntonBot()
+│   ├── database/             # 🗄️ SQLite ORM
+│   ├── handlers/             # 👤 client.py | 👨‍💼 admin.py
+│   ├── services/             # 📊 stats.py | ⏰ reminders.py
+│   └── utils/                # 🏷️ StateManager | ⌨️ Keyboards
+├── data/anton_bot.db      # БД + JSON
+├──.env
+├──requirements.txt
+└──Main.py
+
+📱 API Демонстрация
+🎨 Поиск идей тату (YandexGPT + Pinterest)
+python
+# API вызов
+from src.handlers.client import process_tattoo_idea
+process_tattoo_idea(bot, chat_id=123, idea="роза", location="рука")
+
+# Результат пользователю:
+"""
+🎨 РОЗА НА РУКА
+
+📍 Место: рука
+🔍 Идея: роза
+🧠 Значение:
+Роза символизирует любовь, страсть и красоту.
+На руке подчеркивает женственность и грацию.
+
+👇 Pinterest: [Открыть 100+ фото]
+[🔄 Еще идея] [🏠 Меню]
+"""
+📅 Система записи
+python
+# Состояние FSM
+StateManager.set(chat_id, 'date')  # 📅 Выбор даты
+# Пользователь: "📅 20.03"
+# → Антону: "🆕 НОВАЯ ЗАПИСЬ! 👤 Карина 📅 20.03"
+
+StateManager.set(chat_id, 'question')  # 💬 Вопрос мастеру
+# Пользователь: "Какой уход?"
+# → Антону: "💬 Карина: Какой уход?"
+📊 Статистика (Реального времени)
+python
+from src.services.stats import get_stats
+print(get_stats())
+"""
+📊 СТАТИСТИКА
+👥 Пользователей: 47
+💬 Взаимодействий: 238
+📅 Записей: 12
+🔍 Поисков идей: 89
+"""
+⏰ Авто-напоминания (Scheduler)
+python
+# Каждые 5 минут проверяет БД
+Scheduler.add_job(check_reminders, minutes=5)
+
+def check_reminders(bot):
+    for booking in Booking.confirmed():
+        if now == booking.time - 6h:
+            send_reminder(bot, chat_id, "reminder_6h")
+🏷️ StateManager (FSM)
+python
+# Установить состояние
+StateManager.set(chat_id, 'tattoo', {'state': 'waiting_location'})
+
+# Проверить состояние
+if StateManager.get(chat_id)?.state == 'waiting_idea':
+    location = StateManager.get_tattoo_data(chat_id).location
+    process_tattoo_idea(bot, idea, location)
+🛠 Установка
+Локально
+bash
+pip install pyTelegramBotAPI==4.14.0 peewee apscheduler requests python-dotenv
+cp .env.example .env
+# TOKEN=your_bot_token
+python main.py
+Railway (5 минут)
+bash
+npm i -g @railway/cli
+railway login
+railway init
+railway up
+# Добавить .env в Dashboard
+📁 Структура БД
+sql
+-- data/anton_bot.db
+CREATE TABLE usersearchhistory (
+    chat_id INTEGER PRIMARY KEY,
+    searches JSON,  -- [{"idea": "роза", "location": "рука"}]
+    created_at DATETIME
+);
+
+CREATE TABLE booking (
+    booking_id TEXT PRIMARY KEY,
+    chat_id INTEGER,
+    datetime TEXT,  -- "2026-03-20 14:00"
+    status TEXT DEFAULT 'confirmed'
+);
+⚙️ Переменные окружения
+text
+# .env
+TOKEN=8736224674:AAEJJNx15lVIANtSHzJApskOxC3YtGrC4ns
+ANTON_CHAT_ID=496910417
+YANDEX_GPT_API_KEY=your_key
+YANDEX_GPT_FOLDER_ID=b1gtv9d5mri0ffgcr4i5
+🎮 Демо-сценарии
+1. Поиск тату
+text
+👋 /start
+💡 Найти идею тату
+🤲 Рука
+> роза
+🎨 РОЗА НА РУКА + Pinterest + Значение от GPT
+2. Запись
+text
+🎨 Записаться на тату
+📅 20.03 (Пт)
+✅ ЗАПИСЬ ПЕРЕДАНА АНТОНУ!
+3. Админка
+text
+👨‍💼 /start (ANTON_CHAT_ID)
+📊 Статистика → 47 пользователей
+➕ Добавить запись → userinfo3bot → chat_id → 20.03 14:00
+📈 Метрики
+Метрика	API	Пример
+Пользователи	len(data/stats.json)	47
+Записи	Booking.select().count()	12
+Поиски	UserSearchHistory.count()	89
+Состояний	len(StateManager._states)	3
+🧪 Тестирование API
+python
+# Тест 1: Поиск тату
+from src.handlers.client import process_tattoo_idea
+process_tattoo_idea(bot, 123456, "волк", "предплечье")
+
+# Тест 2: Статистика
+from src.services.stats import get_stats
+assert "📊 СТАТИСТИКА" in get_stats()
+
+# Тест 3: Состояние
+from src.utils.state_manager import StateManager
+StateManager.set(123, 'test', {'data': 'test'})
+assert StateManager.get(123)['state'] == 'test'
+🚀 Деплой (Railway)
+bash
+railway login
+railway init
+railway up
+# Dashboard → Variables → TOKEN, ANTON_CHAT_ID
+Готово! Бот онлайн 24/7 за 5 минут.
+
+📞 Контакты
+text
+👨‍🎨 Антон - Тату-мастер
+📱 +79373036332 (кликабельно)
+💬 @Antonkonturufa
+📍 Уфа, Пр. Октября
