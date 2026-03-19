@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "antonbot-490313",
+  "private_key_id": "600d94cb5c5542396aac0d31215bd36872b1cfed",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDBBcHth58eBOgV\nSxp3UtZ6Jvr1a3tkaZxcgbO6OTk8bxv1JU6tHc3vvKO+3MS8/Xdr/Rtpia/I2iXH\n3sZh8/wdxA/clmSjaYOrirE/dLMpaahABnSq44MlLIwZSAeKGL0NShE3jUSsLBth\nqXoUA1UwRy2qsJ9wV+YM+TKONThVl1Jp8osqaBwKoEZD5o4hKXgnLw2qIHYL0CQj\njt6EiRpgZOoYqnziZWD9ZjfnqOsATPN6O9B+hBy4t//hhUQceW7JTMAkWPWCKhon\nXMyAoOFbm/LmG0OvG9P8YZrqD0wlVJ551omK/Od7FLmCnammC65t/fCPTM2mKZEu\nCqoOHEi9AgMBAAECggEAENkoTsv2QyAJhAZMtpqn9vydDjwGBsNDLz3xCrHBAbnv\nFkxd3DWMSr9MCbZqg9aaDHaI5ILssZr9Dj+vUFCEMrLw8X+9JBhrMleGVjQhCV3c\nHk6R83KteVq0leZYJiE3q0fKTe+KTX8CGtm4urN5xZ+I6GvHVv6NKZe85nXVx36p\nWQ6jnOz31ReJ8B3u3uefmT3cbbLI2xfv02EBs0IdsRlWQQERJe4TwO+1Cy9qigpg\npgi/dgFODTTKgLHVE89RCLlyjKnxqEI1AxNbCbtH9KbyOYvi2CwmzMs50nBzVL+2\nT/x/YpxTXHYFT6Ya+VB/e8RGxPib+3EBZgFJfvdZ3wKBgQD4vQm1uy/PqMLO9uWs\nhojUn88CrOVqqvBeMh3jxZHgHU4mx3CyxXmyxynOteX2bbBj51WPEusqsq/ipLbD\nzUKctkbGZoFlEB3PKmKCiOxGzMKk7ciw4PmNmgSYXIRZOLqEwaL1uYbS6vxTj89C\nAj3usXjc23op8PMN8X7SQ3iAvwKBgQDGqFK1MC8c4EVglSBApAaJlD40C74vkLj6\nOI8Gxa/IyRK4NCU4LdOYmKsU9G5/4rKjHJqaiACtLFLRNKWb0zw+FG8P0kV1indH\n/+R3sxZghL1Ltdyi3koPYyUzKvc8LFkp3aq2EgzkwXBd/1zdfv87CW+MydiMespm\njOlOWVBZgwKBgQCbHCcF8Kir8i0pKsWmhG6nSNCqdm7JybcCxnXlJ7sD6sJlZFFe\n6c4uMgxcHwo8VcJ9SjEMe1uy0KLlzpk6GLHFT9Vqu1lNUHOGUIQFqqTMsbtfZfiU\ndHaqWrUq3eaaTMnjJ20blooA1RBse21fWE6OnpUkBKl1pg+rTkErlW97uQKBgQC8\nHve7hvaGZMauEGnrbKiYLh69kIU4a9cPdPHUWu38uJSWhSLd0V+3+JLCFDpztkyt\n889gGPxzAS8n17AgIOfCbf1CQT/vcAFG2EcVJy1Al1Le2Egon1IIwj2e98gKXoDN\nCZG4Ot2k3p23FbRuN+4gjO3qp9X+KeVzOWtR+3gAWwKBgCOjzouhcJzT4f1/5ts5\ngjkW8FwaKJvZHjpxaKTFbO8/Eh9+siaN3WIzaIqyEGDVBBpIXha4nhORKatKc1z5\nxuSp8UXd0v5S9kNc1N//srC0lb6Prl5/Dl0eRfjXv7JpATrHXbX+sh68nHDu0NtX\nRef2lvQjTT+/bVz+RX9cUFOK\n-----END PRIVATE KEY-----\n",
+  "client_email": "anton-bot-service@antonbot-490313.iam.gserviceaccount.com",
+  "client_id": "113062004857801833795",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/anton-bot-service%40antonbot-490313.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
