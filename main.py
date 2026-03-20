@@ -10,10 +10,10 @@ sys.path.insert(0, str(APP_ROOT)) # /app
 print(f"📁 APP_ROOT: {APP_ROOT}")
 print(f"📁 SRC_DIR: {SRC_DIR}")
 
-from core.bot import create_bot, run_bot
+from core.bot import create_bot
 from database.database import init_db
 from services.reminders import load_reminders
-from handlers.admin import register_admin_handlers, start_reminder_scheduler  # ✅ ДОБАВЛЕН ИМПОРТ
+from handlers.admin import register_admin_handlers, start_reminder_scheduler  # ✅ ИМПОРТ
 
 print("✅ Импорты работают!")
 
@@ -30,13 +30,12 @@ def main():
     register_admin_handlers(bot)
     start_reminder_scheduler(bot)
     
-    # ✅ БЕЗОПАСНЫЙ POLLING (фиксит Error 409)
+    # ✅ ПРАВИЛЬНЫЙ polling БЕЗ 'clean'
     print("✅ Запуск безопасного polling...")
     bot.infinity_polling(
-        none_stop=True, 
-        interval=1,      # Увеличен интервал
-        timeout=30,      # Увеличен таймаут
-        clean=True       # Очищает очередь
+        none_stop=True,    # не останавливается при ошибках
+        interval=1,        # пауза между запросами
+        timeout=30         # таймаут long polling
     )
 
 if __name__ == "__main__":
@@ -49,4 +48,3 @@ if __name__ == "__main__":
         import time
         while True: 
             time.sleep(10)
-
