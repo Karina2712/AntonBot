@@ -61,7 +61,7 @@ def get_custom_reminders():
     return load_custom_reminders()
 
 def safe_parse_datetime(date_obj_or_str):
-    """Фикс для всех форматов Peewee datetime"""
+    """🔧 Фикс для всех форматов Peewee datetime + битые даты с днями недели"""
     try:
         # Peewee возвращает datetime объекты напрямую!
         if hasattr(date_obj_or_str, 'strftime') and callable(date_obj_or_str.strftime):
@@ -69,18 +69,28 @@ def safe_parse_datetime(date_obj_or_str):
             
         date_str = str(date_obj_or_str).strip()
         
-        # Игнорируем битые форматы типа '2026-03-17 (Tue)'
-        if '(Tue)' in date_str or '(Mon)' in date_str or '(Wed)' in date_str:
-            logger.warning(f"Пропуск битой даты с днем недели: {date_str}")
-            return None
-            
+        # ✅ ФИКС: Расширенная проверка битых дат с днями недели
+        days_of_week = ['Mon)', 'Tue)', 'Wed)', 'Thu)', 'Fri)', 'Sat)', 'Sun)', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        day_patterns = [day.lower() for day in days_of_week]
+        
+        for day in day_patterns:
+            if day in date_str.lower():
+                logger.warning(f"⚠️ Пропуск битой даты с днем недели: {date_str}")
+                return None
+        
+        # ✅ ФИКС: Удаляем лишние пробелы и скобки
+        date_str = re.sub(r'\s*\([^)]*\)', '', date_str).strip()
+        date_str = re.sub(r'\s+', ' ', date_str).strip()
+        
         formats = [
             '%Y-%m-%d %H:%M:%S.%f',
             '%Y-%m-%d %H:%M:%S', 
             '%Y-%m-%d %H:%M',
             '%d.%m.%Y %H:%M',
             '%Y-%m-%d',
-            '%d.%m.%Y'
+            '%d.%m.%Y',
+            '%d/%m/%Y %H:%M',
+            '%Y/%m/%d %H:%M'
         ]
         
         for fmt in formats:
@@ -89,11 +99,11 @@ def safe_parse_datetime(date_obj_or_str):
             except ValueError:
                 continue
                 
-        logger.warning(f"Невозможно распарсить дату: {date_str}")
+        logger.warning(f"⚠️ Невозможно распарсить дату: {date_str}")
         return None
         
     except Exception as e:
-        logger.error(f"Критическая ошибка парсинга даты {date_obj_or_str}: {e}")
+        logger.error(f"❌ Критическая ошибка парсинга даты {date_obj_or_str}: {e}")
         return None
 
 def extract_chat_id(text):
@@ -130,7 +140,7 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
             bot.send_message(
                 chat_id,
                 templates['two_hours'].format(
-                    datetime=booking_dt.strftime('%d.%m.%Y %H:%M')  # ИСПРАВЛЕНО: %m вместо %M
+                    datetime=booking_dt.strftime('%d.%m.%Y %H:%M')
                 ),
                 parse_mode='Markdown'
             )
@@ -145,14 +155,15 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
         except Exception as e:
             logger.error(f"❌ Ошибка отправки вечернего напоминания {chat_id}: {e}")
 
-    # Отменяем старые напоминания БЕЗОБРАЗНО
+    # ✅ ОТМЕНЯЕМ СТАРЫЕ НАПОМИНАНИЯ
     for key in [f"{chat_id}_day", f"{chat_id}_2h", f"{chat_id}_19"]:
         if key in reminder_scheduler:
             try:
                 reminder_scheduler[key].cancel()
                 del reminder_scheduler[key]
-            except:
-                pass
+                logger.info(f"🗑️ Отменено старое напоминание {key}")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось отменить {key}: {e}")
 
     now = datetime.now()
     
@@ -188,11 +199,13 @@ def check_existing_reminders(bot):
             bookings = Booking.select()
             now = datetime.now()
             valid_count = 0
+            skipped_count = 0
             
             for booking in bookings:
                 booking_dt = safe_parse_datetime(booking.datetime)
                 if booking_dt is None:
                     logger.warning(f"⚠️ Пропуск записи {booking.chat_id} - битая дата: {booking.datetime}")
+                    skipped_count += 1
                     continue
                 
                 valid_count += 1
@@ -202,7 +215,7 @@ def check_existing_reminders(bot):
                 else:
                     logger.info(f"⏰ Запись {booking.chat_id} уже прошла: {booking_dt}")
             
-            logger.info(f"✅ Проверено записей: {valid_count}, пропущено битых дат")
+            logger.info(f"✅ Проверено записей: {valid_count}, пропущено битых дат: {skipped_count}")
                     
     except Exception as e:
         logger.error(f"❌ Ошибка проверки напоминаний: {e}")
@@ -211,16 +224,26 @@ def cleanup_scheduler():
     """Очистка завершившихся таймеров"""
     while True:
         time.sleep(300)  # 5 минут
-        for key in list(reminder_scheduler.keys()):
+        to_delete = []
+        for key, timer in reminder_scheduler.items():
             try:
-                if hasattr(reminder_scheduler[key], 'is_alive') and not reminder_scheduler[key].is_alive():
-                    del reminder_scheduler[key]
+                # Проверяем разные типы таймеров
+                if hasattr(timer, 'is_alive') and not timer.is_alive():
+                    to_delete.append(key)
+                elif hasattr(timer, 'finished') and timer.finished.is_set():
+                    to_delete.append(key)
+            except:
+                to_delete.append(key)
+        
+        for key in to_delete:
+            try:
+                del reminder_scheduler[key]
             except:
                 pass
 
 def register_admin_handlers(bot: telebot.TeleBot):
     """Регистрация всех админ хендлеров"""
-    # ПРОВЕРКА НАПОМИНАНИЙ ПРИ ЗАПУСКЕ
+    # ✅ ПРОВЕРКА НАПОМИНАНИЙ ПРИ ЗАПУСКЕ
     check_existing_reminders(bot)
     
     # Кнопки-команды (работают всегда)
@@ -463,8 +486,3 @@ def start_reminder_scheduler(bot):
     cleanup_thread = threading.Thread(target=cleanup_scheduler, daemon=True)
     cleanup_thread.start()
     logger.info("✅ Планировщик напоминаний запущен")
-
-    cleanup_thread = threading.Thread(target=cleanup_scheduler, daemon=True)
-    cleanup_thread.start()
-    logger.info("✅ Планировщик напоминаний запущен")
-
