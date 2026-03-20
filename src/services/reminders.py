@@ -1,6 +1,7 @@
 
 
-from ..database.models import Booking
+from src.database.models import Booking 
+
 
 import json
 def load_reminders():
