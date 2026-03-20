@@ -49,6 +49,7 @@ def load_custom_reminders():
 
 def save_custom_reminders(templates):
     try:
+        os.makedirs(os.path.dirname(REMINDERS_FILE), exist_ok=True)
         with open(REMINDERS_FILE, 'w', encoding='utf-8') as f:
             json.dump(templates, f, ensure_ascii=False, indent=2)
         return True
@@ -58,6 +59,25 @@ def save_custom_reminders(templates):
 
 def get_custom_reminders():
     return load_custom_reminders()
+
+def safe_parse_datetime(date_str):
+    """Безопасный парсинг разных форматов дат из БД"""
+    formats = [
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%d.%m.%Y %H:%M',
+        '%Y-%m-%d',
+        '%d.%m.%Y'
+    ]
+    
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt)
+        except ValueError:
+            continue
+    
+    logger.error(f"Не удалось распарсить дату: {date_str}")
+    return None
 
 def extract_chat_id(text):
     patterns = [
@@ -84,6 +104,7 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
                 ),
                 parse_mode='Markdown'
             )
+            logger.info(f"Напоминание за день отправлено пользователю {chat_id}")
         except Exception as e:
             logger.error(f"Ошибка отправки напоминания за день {chat_id}: {e}")
 
@@ -92,56 +113,93 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
             bot.send_message(
                 chat_id,
                 templates['two_hours'].format(
-                    datetime=booking_dt.strftime('%d.%m.%Y %H:%M')  # ИСПРАВЛЕНО: %m вместо %M
+                    datetime=booking_dt.strftime('%d.%m.%Y %H:%M')
                 ),
                 parse_mode='Markdown'
             )
+            logger.info(f"Напоминание за 2 часа отправлено пользователю {chat_id}")
         except Exception as e:
             logger.error(f"Ошибка отправки напоминания за 2 часа {chat_id}: {e}")
 
     def send_19():
         try:
             bot.send_message(chat_id, templates['evening'], parse_mode='Markdown')
+            logger.info(f"Вечернее напоминание отправлено пользователю {chat_id}")
         except Exception as e:
             logger.error(f"Ошибка отправки вечернего напоминания {chat_id}: {e}")
 
     # Отменяем старые напоминания
     for key in [f"{chat_id}_day", f"{chat_id}_2h", f"{chat_id}_19"]:
         if key in reminder_scheduler:
-            reminder_scheduler[key].cancel()
+            try:
+                reminder_scheduler[key].cancel()
+            except:
+                pass
 
     now = datetime.now()
     
     # За день в 9:00
     send_time_day = (booking_dt - timedelta(days=1)).replace(hour=9, minute=0, second=0, microsecond=0)
     if send_time_day > now:
-        sec_day = (send_time_day - now).total_seconds()
+        sec_day = max(0.1, (send_time_day - now).total_seconds())
         reminder_scheduler[f"{chat_id}_day"] = threading.Timer(sec_day, send_day)
         reminder_scheduler[f"{chat_id}_day"].start()
+        logger.info(f"Запланировано напоминание за день для {chat_id} на {send_time_day}")
 
     # За 2 часа
     send_time_2h = booking_dt - timedelta(hours=2)
     if send_time_2h > now:
-        sec_2h = (send_time_2h - now).total_seconds()
+        sec_2h = max(0.1, (send_time_2h - now).total_seconds())
         reminder_scheduler[f"{chat_id}_2h"] = threading.Timer(sec_2h, send_2h)
         reminder_scheduler[f"{chat_id}_2h"].start()
+        logger.info(f"Запланировано напоминание за 2ч для {chat_id} на {send_time_2h}")
 
     # Вечер 19:00
     send_time_19 = booking_dt.replace(hour=19, minute=0, second=0, microsecond=0)
     if send_time_19 > now:
-        sec_19 = (send_time_19 - now).total_seconds()
+        sec_19 = max(0.1, (send_time_19 - now).total_seconds())
         reminder_scheduler[f"{chat_id}_19"] = threading.Timer(sec_19, send_19)
         reminder_scheduler[f"{chat_id}_19"].start()
+        logger.info(f"Запланировано вечернее напоминание для {chat_id} на {send_time_19}")
+
+def check_existing_reminders(bot):
+    """Проверка существующих записей при запуске бота"""
+    try:
+        with db_connection():
+            bookings = Booking.select()
+            now = datetime.now()
+            
+            for booking in bookings:
+                # Безопасный парсинг даты
+                booking_dt = safe_parse_datetime(str(booking.datetime))
+                if booking_dt is None:
+                    logger.warning(f"Пропуск записи {booking.chat_id} - неверная дата: {booking.datetime}")
+                    continue
+                
+                if booking_dt > now:
+                    logger.info(f"Перепланировываю напоминания для {booking.chat_id} на {booking_dt}")
+                    schedule_exact_reminders(bot, booking.chat_id, booking_dt)
+                else:
+                    logger.info(f"Запись {booking.chat_id} уже в прошлом: {booking_dt}")
+                    
+    except Exception as e:
+        logger.error(f"Ошибка проверки напоминаний: {e}")
 
 def cleanup_scheduler():
     """Очистка завершившихся таймеров"""
     while True:
-        time.sleep(300)  # 5 минут
+        time.sleep(300)
         for key in list(reminder_scheduler):
-            if not reminder_scheduler[key].is_alive():
-                del reminder_scheduler[key]
+            try:
+                if hasattr(reminder_scheduler[key], 'is_alive') and not reminder_scheduler[key].is_alive():
+                    del reminder_scheduler[key]
+            except:
+                pass
 
 def register_admin_handlers(bot: telebot.TeleBot):
+    # Запуск проверки напоминаний при первом вызове
+    check_existing_reminders(bot)
+    
     # Кнопки-команды (работают всегда)
     @bot.message_handler(
         func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and m.text == "📊 Статистика"
@@ -190,7 +248,12 @@ def register_admin_handlers(bot: telebot.TeleBot):
                     return
                 clients_text = "👥 **ЗАПИСИ КЛИЕНТОВ:**\\n\\n"
                 for booking in bookings:
-                    clients_text += f"• {booking.username or 'N/A'} — {booking.datetime.strftime('%d.%m.%Y %H:%M')}\\n"
+                    dt_str = str(booking.datetime)
+                    booking_dt = safe_parse_datetime(dt_str)
+                    if booking_dt:
+                        clients_text += f"• {booking.username or 'N/A'} — {booking_dt.strftime('%d.%m.%Y %H:%M')}\\n"
+                    else:
+                        clients_text += f"• {booking.username or 'N/A'} — {dt_str}\\n"
                 bot.send_message(
                     message.chat.id,
                     clients_text,
@@ -262,7 +325,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             del user_states[message.chat.id]
             return
 
-        # Кнопки редактирования (установка состояний)
+        # Кнопки редактирования
         text_lower = message.text.lower()
         if "редактировать день" in text_lower:
             user_states[message.chat.id] = {'state': 'edit_day_reminder'}
@@ -371,5 +434,3 @@ def start_reminder_scheduler(bot):
     cleanup_thread.start()
     logger.info("✅ Планировщик напоминаний запущен")
 
-
-    threading.Thread(target=cleanup, daemon=True).start()
