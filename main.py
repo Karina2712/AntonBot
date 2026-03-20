@@ -25,7 +25,9 @@ def main():
     load_reminders()
     print("🚀 Запуск бота...")
     run_bot()
-
+register_admin_handlers(bot)
+start_reminder_scheduler(bot)
+bot.infinity_polling(none_stop=True, interval=0, timeout=20)
 if __name__ == "__main__":
     try:
         main()
