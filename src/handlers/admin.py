@@ -155,7 +155,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
     
     logger.info("🔧 Регистрация админ хендлеров...")
 
-
+    # 🔥 #0 КОМАНДА /ADMIN - САМЫЙ ВЫСОКИЙ ПРИОРИТЕТ
     @bot.message_handler(commands=['admin'])
     def admin_command(message):
         if message.chat.id != settings.ANTON_CHAT_ID:
@@ -164,7 +164,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         logger.info(f"✅ АДМИН КОМАНДА /admin от {message.chat.id}")
         show_admin_panel(bot, message.chat.id)
 
-
+    # 🔥 #1 АДМИНСКИЕ КНОПКИ - ОЧЕНЬ ВЫСОКИЙ ПРИОРИТЕТ
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and m.text in ADMIN_BUTTONS)
     def handle_admin_buttons(message):
         chat_id = message.chat.id
@@ -233,6 +233,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.send_message(chat_id, text, reply_markup=reminders_editor_menu(), parse_mode='Markdown')
             return
 
+    # 🔥 #2 АДМИНСКИЕ СОСТОЯНИЯ
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and bool(user_states.get(m.chat.id, {}).get('state')))
     def handle_admin_states(message):
         chat_id = message.chat.id
@@ -316,7 +317,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             user_states.pop(chat_id, None)
             return
 
-
+    # 🔥 #3 АДМИНСКИЕ CALLBACK
     @bot.callback_query_handler(func=lambda call: call.message.chat.id == settings.ANTON_CHAT_ID)
     def handle_admin_callbacks(call):
         chat_id = call.message.chat.id
@@ -350,18 +351,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
             )
         bot.answer_callback_query(call.id)
 
+    # 🔥 #4 ДИАГНОСТИКА - ЛОВИТ ВСЕ СООБЩЕНИЯ ОТ АДМИНА
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID)
     def debug_admin_messages(message):
         logger.info(f"🔍 АДМИН СООБЩЕНИЕ: '{message.text}' (не обработано другими хендлерами)")
 
     _admin_handlers_registered = True
     logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ - 100% РАБОТАЕТ!")
-
-# ✅ ГЛАВНЫЙ ФАЙЛ (main.py) - ПРАВИЛЬНЫЙ ПОРЯДОК:
-"""
-import telebot
-from admin_handlers import register_admin_handlers, start_reminder_scheduler
-from config.settings import settings
-
-bot = telebot.TeleBot(settings.TOKEN)
 
