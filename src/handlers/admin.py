@@ -72,12 +72,10 @@ def extract_chat_id(text):
 def safe_send_message(bot, chat_id, text, **kwargs):
     """✅ БЕЗОПАСНАЯ отправка сообщений без Markdown ошибок"""
     try:
-        # Убираем parse_mode если есть проблемные символы
         if any(symbol in text for symbol in ['[', ']', '*', '_', '`', '\\']):
             kwargs.pop('parse_mode', None)
         bot.send_message(chat_id, text, **kwargs)
     except Exception as e:
-        # Fallback - отправляем как plain text
         logger.warning(f"Markdown ошибка, отправляем plain text: {e}")
         kwargs.pop('parse_mode', None)
         bot.send_message(chat_id, text, **kwargs)
@@ -198,7 +196,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         
         logger.info(f"🔄 Админ состояние: '{state}' | Текст: '{repr(message.text)}'")
         
-        # Добавление записи - ✅ ИСПРАВЛЕНО!
+        # ✅ ПОЛНОЕ СОЗДАНИЕ ЗАПИСИ СО ВСЕМИ ПОЛЯМИ
         if state == 'admin_waiting_chat_id':
             chat_id_str = extract_chat_id(message.text)
             logger.info(f"🔍 Извлечен chat_id: {chat_id_str}")
@@ -244,36 +242,35 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
                 client_chat_id = user_states[chat_id]['client_chat_id']
                 
-                # ✅ ИСПРАВЛЕНО: используем get_or_create + правильные поля
+                # ✅ ВСЕ ОБЯЗАТЕЛЬНЫЕ ПОЛЯ МОДЕЛИ Booking
                 with db_connection():
-                    # Проверяем существование записи
-                    existing, created = Booking.get_or_create(
-                        chat_id=client_chat_id,
-                        datetime=booking_dt.isoformat(),
-                        defaults={
-                            'username': f"user_{client_chat_id}",
-                            'booking_id': f"BOOK_{client_chat_id}_{int(time.time())}"  # ✅ УНИКАЛЬНЫЙ ID
-                        }
-                    )
+                    booking_id = f"BOOK_{client_chat_id}_{int(time.time())}"
+                    time_str = booking_dt.strftime('%H:%M')
+                    date_str = booking_dt.strftime('%d.%m.%Y')
                     
-                    if not created:
-                        safe_send_message(bot, chat_id, 
-                            f"⚠️ Запись для {client_chat_id} на {booking_dt.strftime('%d.%m.%Y %H:%M')} уже существует!",
-                            reply_markup=admin_exit_keyboard())
-                        user_states.pop(chat_id, None)
-                        return
+                    # Создаем запись со ВСЕМИ полями
+                    booking = Booking.create(
+                        chat_id=client_chat_id,
+                        booking_id=booking_id,
+                        username=f"user_{client_chat_id}",
+                        datetime=booking_dt.isoformat(),
+                        time=time_str,  # ✅ КРИТИЧЕСКОЕ ПОЛЕ
+                        date=date_str,  # ✅ ДОПОЛНИТЕЛЬНОЕ ПОЛЕ
+                        status='confirmed'  # ✅ СТАТУС ПО УМОЛЧАНИЮ
+                    )
                 
                 schedule_exact_reminders(bot, client_chat_id, booking_dt)
                 
                 success_msg = f"""✅ Запись успешно создана!
 
 👤 Client ID: {client_chat_id}
-📅 Дата: {booking_dt.strftime('%d.%m.%Y %H:%M')}
-💉 Мастер: Антон
-🆔 Booking ID: BOOK_{client_chat_id}_{int(time.time())}"""
+🆔 Booking ID: {booking_id}
+📅 Дата: {date_str}
+🕐 Время: {time_str}
+💉 Мастер: Антон"""
                 
                 safe_send_message(bot, chat_id, success_msg, reply_markup=admin_exit_keyboard())
-                logger.info(f"✅ Запись создана: {client_chat_id} на {booking_dt}")
+                logger.info(f"✅ Запись создана: {client_chat_id} | ID: {booking_id}")
                 user_states.pop(chat_id, None)
                 
             except ValueError:
@@ -355,7 +352,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 disable_web_page_preview=True)
             return
 
-        # остальные кнопки...
         elif text == "📊 Статистика":
             try:
                 stats_text = get_stats()
@@ -430,4 +426,3 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
     _admin_handlers_registered = True
     logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ!")
-
