@@ -18,8 +18,6 @@ from services.stats import get_stats
 logger = logging.getLogger(__name__)
 db = SqliteDatabase('bookings.db')
 
-# ✅ ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
-_admin_mode_active = set()
 _admin_handlers_registered = False
 
 @contextmanager
@@ -130,21 +128,11 @@ def reminders_editor_menu():
     markup.add(telebot.types.InlineKeyboardButton("❌ Назад", callback_data="admin_back"))
     return markup
 
-# ✅ КРИТИЧНО: УПРОЩЕННАЯ ПРОВЕРКА АДМИНА
-def is_strict_admin_message(message):
-    """ТОЛЬКО 6 конкретных кнопок - НИЧЕГО БОЛЬШЕ"""
-    if message.chat.id != settings.ANTON_CHAT_ID:
-        return False
-    
-    admin_buttons = [
-        "📊 Статистика", 
-        "📢 Рассылка акций", 
-        "➕ Добавить запись", 
-        "👥 Список клиентов", 
-        "✏️ Редактировать рассылки", 
-        "❌ Выход из админки"
-    ]
-    return message.text in admin_buttons
+# ✅ СТРОГО ОГРАНИЧЕННЫЕ АДМИНСКИЕ КНОПКИ
+ADMIN_BUTTONS = {
+    "📊 Статистика", "📢 Рассылка акций", "➕ Добавить запись", 
+    "👥 Список клиентов", "✏️ Редактировать рассылки", "❌ Выход из админки"
+}
 
 def register_admin_handlers(bot: telebot.TeleBot):
     global _admin_handlers_registered
@@ -155,10 +143,12 @@ def register_admin_handlers(bot: telebot.TeleBot):
     
     logger.info("🔧 Регистрация админ хендлеров...")
 
-    # ✅ #1 СТРОГО АДМИНСКИЕ КНОПКИ (ПЕРВЫЙ ПРИОРИТЕТ)
-    @bot.message_handler(func=is_strict_admin_message)
+    # 🔥 #1 АДМИНСКИЕ КНОПКИ - МАКСИМАЛЬНЫЙ ПРИОРИТЕТ
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and m.text in ADMIN_BUTTONS)
     def handle_admin_buttons(message):
         chat_id = message.chat.id
+        
+        logger.info(f"✅ АДМИН КНОПКА: {message.text}")
         
         if message.text == "❌ Выход из админки":
             user_states.pop(chat_id, None)
@@ -217,17 +207,14 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.send_message(chat_id, text, reply_markup=reminders_editor_menu(), parse_mode='Markdown')
             return
 
-    # ✅ #2 СОСТОЯНИЯ АДМИНА (ВТОРОЙ ПРИОРИТЕТ)
+    # 🔥 #2 АДМИНСКИЕ СОСТОЯНИЯ - СТРОГО ПО STATE
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and bool(user_states.get(m.chat.id, {}).get('state')))
     def handle_admin_states(message):
         chat_id = message.chat.id
-        state_data = user_states.get(chat_id, {})
-        state = state_data.get('state')
+        state = user_states.get(chat_id, {}).get('state')
         
-        if not state:
-            return False  # ✅ ПРОПУСК ДЛЯ КЛИЕНТОВ
-
-        # waiting_chat_id_link
+        logger.info(f"🔄 Админ состояние: {state}")
+        
         if state == 'waiting_chat_id_link':
             chat_id_str = extract_chat_id(message.text)
             if not chat_id_str:
@@ -235,16 +222,14 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 return
             try:
                 client_id = int(chat_id_str)
-                state_data['chat_id'] = client_id
-                state_data['state'] = 'waiting_datetime'
-                user_states[chat_id] = state_data
+                user_states[chat_id]['chat_id'] = client_id
+                user_states[chat_id]['state'] = 'waiting_datetime'
                 bot.send_message(chat_id, f"✅ Chat ID: `{client_id}`\n📅 Дата (ДД.ММ.ГГГГ ЧЧ:ММ):", 
                                parse_mode='Markdown', reply_markup=admin_exit_keyboard())
             except:
                 bot.send_message(chat_id, "❌ Неверный chat_id!", reply_markup=admin_exit_keyboard())
             return
 
-        # waiting_datetime
         elif state == 'waiting_datetime':
             try:
                 booking_dt = datetime.strptime(message.text.strip(), '%d.%m.%Y %H:%M')
@@ -253,10 +238,10 @@ def register_admin_handlers(bot: telebot.TeleBot):
                     return
 
                 with db_connection():
-                    Booking.create(chat_id=state_data['chat_id'], username=f"user_{state_data['chat_id']}", datetime=booking_dt.isoformat())
-                schedule_exact_reminders(bot, state_data['chat_id'], booking_dt)
+                    Booking.create(chat_id=user_states[chat_id]['chat_id'], username=f"user_{user_states[chat_id]['chat_id']}", datetime=booking_dt.isoformat())
+                schedule_exact_reminders(bot, user_states[chat_id]['chat_id'], booking_dt)
                 
-                bot.send_message(chat_id, f"✅ Запись `{state_data['chat_id']}` на {booking_dt.strftime('%d.%m %H:%M')}", 
+                bot.send_message(chat_id, f"✅ Запись `{user_states[chat_id]['chat_id']}` на {booking_dt.strftime('%d.%m %H:%M')}", 
                                reply_markup=admin_exit_keyboard())
                 user_states.pop(chat_id, None)
             except ValueError:
@@ -266,7 +251,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 bot.send_message(chat_id, "❌ Ошибка!", reply_markup=admin_exit_keyboard())
             return
 
-        # waiting_promo_message
         elif state == 'waiting_promo_message':
             promo_text = message.text
             try:
@@ -286,7 +270,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
             user_states.pop(chat_id, None)
             return
 
-        # edit reminders
         elif state in ['edit_day_reminder', 'edit_two_hours', 'edit_evening']:
             templates = get_custom_reminders()
             if state == 'edit_day_reminder':
@@ -304,7 +287,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             user_states.pop(chat_id, None)
             return
 
-    # ✅ #3 CALLBACK ТОЛЬКО ДЛЯ АДМИНА (ПОСЛЕДНИЙ ПРИОРИТЕТ)
+    # 🔥 #3 АДМИНСКИЕ CALLBACK
     @bot.callback_query_handler(func=lambda call: call.message.chat.id == settings.ANTON_CHAT_ID)
     def handle_admin_callbacks(call):
         chat_id = call.message.chat.id
@@ -337,5 +320,9 @@ def register_admin_handlers(bot: telebot.TeleBot):
         bot.answer_callback_query(call.id)
 
     _admin_handlers_registered = True
-    logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ - КЛИЕНТСКИЕ НЕ БЛОКИРУЮТСЯ!")
+    logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ - 100% БЕЗОПАСНО!")
+
+# ✅ В ГЛАВНОМ ФАЙЛЕ:
+# 1. register_admin_handlers(bot)  # ПЕРВЫМ!
+# 2. Затем все клиентские хендлеры
 
