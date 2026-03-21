@@ -261,7 +261,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
     # Проверка напоминаний при запуске
     check_existing_reminders(bot)
 
-    # --- Кнопки-команды (работают всегда) ---
+    # --- ОСНОВНЫЕ АДМИН КНОПКИ (работают всегда) ---
     @bot.message_handler(
         func=lambda m: m.chat.id == settings.ANTON_CHAT_ID
                     and m.text == "📊 Статистика"
@@ -364,22 +364,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
             parse_mode='Markdown'
         )
 
-    @bot.message_handler(
-        func=lambda m: m.chat.id == settings.ANTON_CHAT_ID
-                    and m.text == "🔙 Клиентское меню"
-    )
-    def back_to_client_menu(message):
-        try:
-            from handlers.client import send_welcome
-            send_welcome(message)
-        except Exception as e:
-            logger.error(f"Ошибка клиентского меню: {e}")
-            bot.send_message(
-                message.chat.id,
-                "❌ Ошибка меню",
-                reply_markup=back_keyboard()
-            )
-
     # --- Callback для кнопок редактирования напоминаний ---
     @bot.callback_query_handler(
         func=lambda call: call.message.chat.id == settings.ANTON_CHAT_ID and call.data in ['edit_day', 'edit_2h', 'edit_19']
@@ -417,6 +401,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             )
             bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_evening_reminder)
 
+    # Функции сохранения напоминаний
     def save_day_reminder(message):
         if message.chat.id != settings.ANTON_CHAT_ID:
             return
@@ -444,7 +429,20 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.send_message(message.chat.id, "✅ Напоминание 19:00 обновлено!", reply_markup=back_keyboard())
         user_states.pop(message.chat.id, None)
 
-    # --- Универсальный обработчик для состояний ---
+    # --- Регистрация обработчиков состояний для напоминаний ---
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_day_reminder')
+    def handle_edit_day_reminder(message):
+        save_day_reminder(message)
+
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_two_hours')
+    def handle_edit_two_hours(message):
+        save_two_hours_reminder(message)
+
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_evening')
+    def handle_edit_evening(message):
+        save_evening_reminder(message)
+
+    # --- Универсальный обработчик для состояний АДМИНА (последний по приоритету) ---
     @bot.message_handler(
         func=lambda m: m.chat.id == settings.ANTON_CHAT_ID
     )
@@ -452,7 +450,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         state_data = user_states.get(message.chat.id, {})
         state = state_data.get('state')
         if not state:
-            return
+            return  # Игнорируем если нет состояния
 
         # Добавление записи
         if state == 'waiting_chat_id_link':
@@ -492,8 +490,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 bot.send_message(
                     message.chat.id,
                     f"✅ Запись: `{state_data['chat_id']}` на {booking_dt.strftime('%d.%m %H:%M')}",
-                    parse_mode='Markdown',
-                    reply_markup=back_keyboard()
+                    reply_markup=back_keyboard()  # ✅ ИСПРАВЛЕНО: reply_markup вместо parse_markup
                 )
                 user_states.pop(message.chat.id, None)
             except ValueError:
@@ -533,3 +530,4 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
             user_states.pop(message.chat.id, None)
             return
+
