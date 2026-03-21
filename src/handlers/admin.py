@@ -44,9 +44,9 @@ def get_custom_reminders():
     except:
         pass
     return {
-        'day_before': '👋 Напоминаю! Завтра в {time} у Антона запись на татуировку 💉\n\n📲 Подтвердите или отмените: /yes или /no',
-        'two_hours': '⏰ Через 2 часа ваша запись у Антона! 💉\n\n⏰ {time}\n\nНе опаздывайте! 🚀',
-        'evening': '🌙 Напоминание на завтра!\n\n💉 Запись: {time}\n👨‍🎨 Мастер: Антон\n\nДо встречи! ✨'
+        'day_before': '👋 Напоминаю! Завтра в {time} у Антона запись на татуировку 💉\\n\\n📲 Подтвердите или отмените: /yes или /no',
+        'two_hours': '⏰ Через 2 часа ваша запись у Антона! 💉\\n\\n⏰ {time}\\n\\nНе опаздывайте! 🚀',
+        'evening': '🌙 Напоминание на завтра!\\n\\n💉 Запись: {time}\\n👨‍🎨 Мастер: Антон\\n\\nДо встречи! ✨'
     }
 
 def save_custom_reminders(templates):
@@ -98,7 +98,7 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
         templates = get_custom_reminders()
         text = templates['evening'].format(time=time_str)
         try:
-            bot.send_message(chat_id, f"{text}\n📅 {tomorrow}")
+            bot.send_message(chat_id, f"{text}\\n📅 {tomorrow}")
         except:
             pass
 
@@ -117,11 +117,14 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
     if today_19 > datetime.now() and booking_dt.date() == (datetime.now() + timedelta(days=1)).date():
         threading.Timer((today_19 - datetime.now()).total_seconds(), send_evening).start()
 
-# ✅ ДОБАВЛЕНА ЭТА ФУНКЦИЯ
 def start_reminder_scheduler(bot):
     """Запуск планировщика напоминаний"""
     check_existing_reminders(bot)
     logger.info("✅ Планировщик напоминаний запущен")
+
+def is_admin_mode(chat_id):
+    """Проверка админ режима"""
+    return user_states.get(chat_id, {}).get('state') is not None or chat_id == settings.ANTON_CHAT_ID
 
 def register_admin_handlers(bot: telebot.TeleBot):
     """Регистрация всех админ-хендлеров"""
@@ -167,6 +170,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
         ]
     )
     def handle_admin_buttons(message):
+        """✅ ПЕРВЫЙ ПРИОРИТЕТ - админ кнопки"""
         text = message.text
         
         if text == "📊 Статистика":
@@ -216,8 +220,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
 👇 Выберите для редактирования"""
             bot.send_message(message.chat.id, text, reply_markup=reminders_editor_menu(), parse_mode='Markdown')
 
-    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID)
+    @bot.message_handler(
+        func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and is_admin_mode(m.chat.id)
+    )
     def handle_admin_states(message):
+        """✅ ВТОРОЙ ПРИОРИТЕТ - админ состояния"""
         state_data = user_states.get(message.chat.id, {})
         state = state_data.get('state')
         if not state:
@@ -276,28 +283,27 @@ def register_admin_handlers(bot: telebot.TeleBot):
             user_states.pop(message.chat.id, None)
             return
 
-    # Обработчики редактирования напоминаний
-    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_day_reminder')
-    def handle_edit_day(message):
-        templates = get_custom_reminders()
-        templates['day_before'] = message.text
-        save_custom_reminders(templates)
-        bot.send_message(message.chat.id, "✅ За день обновлено!")
-        user_states.pop(message.chat.id, None)
+        # Редактирование напоминаний
+        if state == 'edit_day_reminder':
+            templates = get_custom_reminders()
+            templates['day_before'] = message.text
+            save_custom_reminders(templates)
+            bot.send_message(message.chat.id, "✅ За день обновлено!")
+            user_states.pop(message.chat.id, None)
+            return
 
-    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_two_hours')
-    def handle_edit_2h(message):
-        templates = get_custom_reminders()
-        templates['two_hours'] = message.text
-        save_custom_reminders(templates)
-        bot.send_message(message.chat.id, "✅ За 2 часа обновлено!")
-        user_states.pop(message.chat.id, None)
+        if state == 'edit_two_hours':
+            templates = get_custom_reminders()
+            templates['two_hours'] = message.text
+            save_custom_reminders(templates)
+            bot.send_message(message.chat.id, "✅ За 2 часа обновлено!")
+            user_states.pop(message.chat.id, None)
+            return
 
-    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_evening')
-    def handle_edit_evening(message):
-        templates = get_custom_reminders()
-        templates['evening'] = message.text
-        save_custom_reminders(templates)
-        bot.send_message(message.chat.id, "✅ 19:00 обновлено!")
-        user_states.pop(message.chat.id, None)
-
+        if state == 'edit_evening':
+            templates = get_custom_reminders()
+            templates['evening'] = message.text
+            save_custom_reminders(templates)
+            bot.send_message(message.chat.id, "✅ 19:00 обновлено!")
+            user_states.pop(message.chat.id, None)
+            return
