@@ -130,12 +130,10 @@ def reminders_editor_menu():
     markup.add(telebot.types.InlineKeyboardButton("❌ Назад", callback_data="admin_back"))
     return markup
 
-def is_admin_message(message):
-    """✅ ТОЛЬКО для Антона и ТОЛЬКО админские кнопки"""
-    chat_id = message.chat.id
-    
-    # ✅ НЕ АДМИН = ВЫХОД БЕЗОПАСНЫЙ
-    if chat_id != settings.ANTON_CHAT_ID:
+# ✅ КРИТИЧНО: УПРОЩЕННАЯ ПРОВЕРКА АДМИНА
+def is_strict_admin_message(message):
+    """ТОЛЬКО 6 конкретных кнопок - НИЧЕГО БОЛЬШЕ"""
+    if message.chat.id != settings.ANTON_CHAT_ID:
         return False
     
     admin_buttons = [
@@ -146,8 +144,6 @@ def is_admin_message(message):
         "✏️ Редактировать рассылки", 
         "❌ Выход из админки"
     ]
-    
-    # ✅ ТОЛЬКО эти кнопки или активный админ режим
     return message.text in admin_buttons
 
 def register_admin_handlers(bot: telebot.TeleBot):
@@ -159,21 +155,17 @@ def register_admin_handlers(bot: telebot.TeleBot):
     
     logger.info("🔧 Регистрация админ хендлеров...")
 
-    # ✅ #1 АДМИН МЕНЕДЖЕР - СТРОГО ОГРАНИЧЕННЫЙ
-    @bot.message_handler(func=is_admin_message)
+    # ✅ #1 СТРОГО АДМИНСКИЕ КНОПКИ (ПЕРВЫЙ ПРИОРИТЕТ)
+    @bot.message_handler(func=is_strict_admin_message)
     def handle_admin_buttons(message):
-        global _admin_mode_active
         chat_id = message.chat.id
         
-        # ✅ ВЫХОД
         if message.text == "❌ Выход из админки":
-            _admin_mode_active.discard(chat_id)
             user_states.pop(chat_id, None)
             bot.send_message(chat_id, "✅ Админ режим отключен", reply_markup=back_keyboard())
             return
         
-        # ✅ СТАТИСТИКА
-        if message.text == "📊 Статистика":
+        elif message.text == "📊 Статистика":
             try:
                 stats_text = get_stats()
                 bot.send_message(chat_id, stats_text, parse_mode='Markdown', reply_markup=admin_exit_keyboard())
@@ -181,13 +173,11 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 bot.send_message(chat_id, "❌ Ошибка статистики", reply_markup=admin_exit_keyboard())
             return
         
-        # ✅ РАССЫЛКА
         elif message.text == "📢 Рассылка акций":
             user_states[chat_id] = {'state': 'waiting_promo_message'}
             bot.send_message(chat_id, "📢 **Введите текст рассылки:**", parse_mode='Markdown', reply_markup=admin_exit_keyboard())
             return
         
-        # ✅ ДОБАВИТЬ ЗАПИСЬ
         elif message.text == "➕ Добавить запись":
             user_states[chat_id] = {'state': 'waiting_chat_id_link'}
             bot.send_message(
@@ -197,7 +187,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
             )
             return
         
-        # ✅ СПИСОК КЛИЕНТОВ
         elif message.text == "👥 Список клиентов":
             try:
                 with db_connection():
@@ -216,7 +205,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 bot.send_message(chat_id, "❌ Ошибка списка", reply_markup=admin_exit_keyboard())
             return
         
-        # ✅ РЕДАКТИРОВАНИЕ РАССЫЛОК
         elif message.text == "✏️ Редактировать рассылки":
             templates = get_custom_reminders()
             text = f"""✏️ **НАПОМИНАНИЯ:**
@@ -229,18 +217,15 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.send_message(chat_id, text, reply_markup=reminders_editor_menu(), parse_mode='Markdown')
             return
 
-    # ✅ #2 СОСТОЯНИЯ АДМИНА - ОТДЕЛЬНЫЙ ХЕНДЛЕР
-    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID)
+    # ✅ #2 СОСТОЯНИЯ АДМИНА (ВТОРОЙ ПРИОРИТЕТ)
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and bool(user_states.get(m.chat.id, {}).get('state')))
     def handle_admin_states(message):
-        global _admin_mode_active
         chat_id = message.chat.id
         state_data = user_states.get(chat_id, {})
         state = state_data.get('state')
         
         if not state:
-            return  # ✅ ПРОПУСКАЕМ - ДЛЯ КЛИЕНТСКИХ ХЕНДЛЕРОВ
-        
-        logger.info(f"🔄 Админ состояние: {state}")
+            return False  # ✅ ПРОПУСК ДЛЯ КЛИЕНТОВ
 
         # waiting_chat_id_link
         if state == 'waiting_chat_id_link':
@@ -301,7 +286,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             user_states.pop(chat_id, None)
             return
 
-        # Редактирование напоминаний
+        # edit reminders
         elif state in ['edit_day_reminder', 'edit_two_hours', 'edit_evening']:
             templates = get_custom_reminders()
             if state == 'edit_day_reminder':
@@ -316,11 +301,10 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 templates['evening'] = message.text
                 save_custom_reminders(templates)
                 bot.send_message(chat_id, "✅ 19:00 обновлено!", reply_markup=admin_exit_keyboard())
-            
             user_states.pop(chat_id, None)
             return
 
-    # ✅ #3 CALLBACK ДЛЯ АДМИНА
+    # ✅ #3 CALLBACK ТОЛЬКО ДЛЯ АДМИНА (ПОСЛЕДНИЙ ПРИОРИТЕТ)
     @bot.callback_query_handler(func=lambda call: call.message.chat.id == settings.ANTON_CHAT_ID)
     def handle_admin_callbacks(call):
         chat_id = call.message.chat.id
@@ -329,7 +313,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
             user_states.pop(chat_id, None)
             bot.edit_message_text("✅ Админ режим завершен", chat_id, call.message.message_id)
             bot.send_message(chat_id, "🔙 Главное меню", reply_markup=back_keyboard())
-            
         elif call.data == 'edit_day':
             templates = get_custom_reminders()
             user_states[chat_id] = {'state': 'edit_day_reminder'}
@@ -354,7 +337,5 @@ def register_admin_handlers(bot: telebot.TeleBot):
         bot.answer_callback_query(call.id)
 
     _admin_handlers_registered = True
-    logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ!")
-
-
+    logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ - КЛИЕНТСКИЕ НЕ БЛОКИРУЮТСЯ!")
 
