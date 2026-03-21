@@ -7,7 +7,7 @@ import requests
 import urllib.parse
 import json
 
-# ✅ Состояния пользователей (оптимизировано - один словарь)
+
 user_states = {}
 
 # Pinterest + YandexGPT настройки
@@ -109,14 +109,14 @@ def show_contacts(chat_id, bot):
     """📞 КОНТАКТЫ с КЛИКАБЕЛЬНЫМ НОМЕРОМ ДЛЯ ЗВОНКА"""
     markup = types.InlineKeyboardMarkup(row_width=1)
 
-    # 🔥 КНОПКА ЗВОНКА - номер телефона кликабельный!
+    #  КНОПКА ЗВОНКА - номер телефона кликабельный!
     markup.add(types.InlineKeyboardButton("📞 Позвонить Антону +79373036332",
                                           url="https://t.me/+79373036332"))
     markup.add(types.InlineKeyboardButton("💬 Telegram Антона", url="https://t.me/Antonkonturufa"))
     markup.add(types.InlineKeyboardButton("🔗 VK Антона", url="https://vk.com/anton.kontur"))
     markup.add(types.InlineKeyboardButton("🏠 Главное меню", callback_data="back_menu"))
 
-    # 🔥 ДОПОЛНИТЕЛЬНО: текст с кликабельным номером
+    # ДОПОЛНИТЕЛЬНО: текст с кликабельным номером
     contact_text = """📱 **Контакты Антона:**
 
 ☎️ **+79373036332** - звони прямо сейчас!
@@ -142,7 +142,6 @@ def register_client_handlers(bot):
         user_name = message.from_user.first_name or "Клиент"
         print(f"DEBUG: /start от {chat_id}")
 
-        # 🔥 ОЧИСТКА состояний одним вызовом
         for state_dict in [user_states]:
             state_dict.pop(chat_id, None)
 
@@ -159,7 +158,7 @@ def register_client_handlers(bot):
         user_name = message.from_user.first_name or "Клиент"
         print(f"DEBUG: '{text}' от {chat_id}")
 
-        # ✅ 0. ВОПРОСЫ АНТОНУ (ПРИОРИТЕТ)
+        #  ВОПРОСЫ АНТОНУ(ПРИОРИТЕТ)
         if user_states.get(chat_id) == 'question':
             question_text = f"💬 {user_name}: {text}"
             bot.send_message(settings.ANTON_CHAT_ID, question_text)
@@ -168,7 +167,7 @@ def register_client_handlers(bot):
             bot.send_message(chat_id, "👋 Что дальше?", reply_markup=client_menu())
             return
 
-        # ✅ 1. СОСТОЯНИЕ ЗАПИСИ (ПРОВЕРКА НА "ГЛАВНОЕ МЕНЮ" И "НАЗАД")
+        #  СОСТОЯНИЕ ЗАПИСИ (ПРОВЕРКА НА "ГЛАВНОЕ МЕНЮ" И "НАЗАД")
         if user_states.get(chat_id) == 'date':
             # 🔥 ИСПРАВЛЕНО: проверка кнопок возврата ПЕРЕД обработкой даты
             if text in ["🏠 Главное меню", "Главное меню", "🔙 Назад"]:
@@ -186,11 +185,11 @@ def register_client_handlers(bot):
             bot.send_message(chat_id, "👋 Что дальше?", reply_markup=client_menu())
             return
 
-        # ✅ 2. TATTOO SEARCH (оптимизировано)
+        #  TATTOO SEARCH
         if chat_id in user_states and isinstance(user_states[chat_id], dict) and 'tattoo' in user_states[chat_id]:
             state_data = user_states[chat_id]['tattoo']
             if state_data['state'] == 'waiting_location':
-                # 🔥 ИСПРАВЛЕНО: проверка кнопок возврата
+
                 if text == "🔙 Назад":
                     del user_states[chat_id]
                     bot.send_message(chat_id, "👋 Выбери действие:", reply_markup=client_menu())
@@ -201,11 +200,11 @@ def register_client_handlers(bot):
                 markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
                 markup.add("🔙 Назад")
                 bot.send_message(chat_id,
-                                 f"🎯 Место: {clean_location}\n\n💡 Идея:\nроза, дракон, волк, лев\n\n🔍 Только для {clean_location}!",
+                                 f"🎯 Место: {clean_location}\n\n💡 Идея:\n(напиши свою идею: например роза,дркон и тд)\n\n🔍 Только для {clean_location}!",
                                  reply_markup=markup)
                 return
             elif state_data['state'] == 'waiting_idea':
-                # 🔥 ИСПРАВЛЕНО: проверка кнопок возврата
+
                 if text == "🔙 Назад":
                     del user_states[chat_id]
                     bot.send_message(chat_id, "👋 Выбери действие:", reply_markup=client_menu())
@@ -217,7 +216,6 @@ def register_client_handlers(bot):
                 del user_states[chat_id]
                 return
 
-        # ✅ 3. ГЛАВНОЕ МЕНЮ
         if text == "💬 Задать вопрос Антону":
             user_states[chat_id] = 'question'
             markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
@@ -240,7 +238,7 @@ def register_client_handlers(bot):
 
         if text == "ℹ️ Информация":
             bot.send_message(chat_id,
-                             "🏪 **АНТОН ТАТУ-МАСТЕР**\n👨‍🎨 Опыт: 6+ лет\n📍 Уфа, Пр. Октября\n💰 Цены от 1500₽",
+                             "🏪 **АНТОН ТАТУ-МАСТЕР**\n👨‍🎨 Опыт: 7+ лет\n📍 Уфа, Пр. Октября(ориентир Семья)\n💰 Цены от 4000₽",
                              parse_mode='Markdown')
             bot.send_message(chat_id, "👇 Вернуться в меню:", reply_markup=client_menu())
             return
@@ -249,11 +247,9 @@ def register_client_handlers(bot):
             show_contacts(chat_id, bot)
             return
 
-        # 🔥 УНИВЕРСАЛЬНАЯ ПРОВЕРКА КНОПОК ВОЗВРАТА (последняя)
         if text in ["🔙 Назад", "🏠 Главное меню", "Главное меню"]:
             user_states.pop(chat_id, None)
             bot.send_message(chat_id, "👋 Выбери действие:", reply_markup=client_menu())
             return
 
-        # ✅ ДЕФОЛТ
         bot.send_message(chat_id, "👋 Выбери действие:", reply_markup=client_menu())
