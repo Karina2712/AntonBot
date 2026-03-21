@@ -1,3 +1,20 @@
+import telebot  # ← КРИТИЧЕСКИЙ ИМПОРТ
+from datetime import datetime, timedelta
+import re
+import threading
+import time
+import json
+import os
+import logging
+
+from config.settings import settings
+from utils.keyboards import back_keyboard, reminders_editor_menu
+from utils.states import user_states
+from src.database.models import Booking
+from services.stats import get_stats
+from peewee import SqliteDatabase
+from contextlib import contextmanager
+
 def register_admin_handlers(bot: telebot.TeleBot):
     """Регистрация всех админ-хендлеров"""
     # Проверка напоминаний при запуске
