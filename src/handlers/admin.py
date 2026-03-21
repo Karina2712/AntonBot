@@ -1,4 +1,4 @@
-import telebot  # ← КРИТИЧЕСКИЙ ИМПОРТ
+import telebot
 from datetime import datetime, timedelta
 import re
 import threading
@@ -7,17 +7,15 @@ import json
 import os
 import logging
 from peewee import SqliteDatabase
+from contextlib import contextmanager
 
 from config.settings import settings
 from utils.keyboards import back_keyboard, reminders_editor_menu
 from utils.states import user_states
 from src.database.models import Booking
 from services.stats import get_stats
-from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
-
-# База данных
 db = SqliteDatabase('bookings.db')
 
 @contextmanager
@@ -45,8 +43,6 @@ def get_custom_reminders():
                 return json.load(f)
     except:
         pass
-    
-    # Дефолтные шаблоны
     return {
         'day_before': '👋 Напоминаю! Завтра в {time} у Антона запись на татуировку 💉\n\n📲 Подтвердите или отмените: /yes или /no',
         'two_hours': '⏰ Через 2 часа ваша запись у Антона! 💉\n\n⏰ {time}\n\nНе опаздывайте! 🚀',
@@ -79,7 +75,6 @@ def check_existing_reminders(bot):
 def schedule_exact_reminders(bot, chat_id, booking_dt):
     """Запланировать точные напоминания"""
     def send_day_reminder():
-        time.sleep(1)  # Небольшая задержка для точности
         templates = get_custom_reminders()
         time_str = booking_dt.strftime('%d.%m.%Y %H:%M')
         text = templates['day_before'].format(time=time_str)
@@ -122,12 +117,15 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
     if today_19 > datetime.now() and booking_dt.date() == (datetime.now() + timedelta(days=1)).date():
         threading.Timer((today_19 - datetime.now()).total_seconds(), send_evening).start()
 
+# ✅ ДОБАВЛЕНА ЭТА ФУНКЦИЯ
+def start_reminder_scheduler(bot):
+    """Запуск планировщика напоминаний"""
+    check_existing_reminders(bot)
+    logger.info("✅ Планировщик напоминаний запущен")
+
 def register_admin_handlers(bot: telebot.TeleBot):
     """Регистрация всех админ-хендлеров"""
-    # Проверка напоминаний при запуске
-    check_existing_reminders(bot)
-
-    # --- 1. Callback для кнопок редактирования (ВЫСШИЙ приоритет) ---
+    
     @bot.callback_query_handler(
         func=lambda call: call.message.chat.id == settings.ANTON_CHAT_ID and 
         call.data in ['edit_day', 'edit_2h', 'edit_19']
@@ -143,7 +141,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 call.message.message_id,
                 parse_mode='Markdown'
             )
-            bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_day_reminder)
             
         elif call.data == 'edit_2h':
             user_states[call.message.chat.id] = {'state': 'edit_two_hours'}
@@ -153,7 +150,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 call.message.message_id,
                 parse_mode='Markdown'
             )
-            bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_two_hours_reminder)
             
         elif call.data == 'edit_19':
             user_states[call.message.chat.id] = {'state': 'edit_evening'}
@@ -163,9 +159,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 call.message.message_id,
                 parse_mode='Markdown'
             )
-            bot.register_next_step_handler_by_chat_id(call.message.chat.id, save_evening_reminder)
 
-    # --- 2. КОНКРЕТНЫЕ КНОПКИ АДМИНА (ВТОРОЙ приоритет) ---
     @bot.message_handler(
         func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and m.text in [
             "📊 Статистика", "📢 Рассылка акций", "➕ Добавить запись", 
@@ -173,7 +167,6 @@ def register_admin_handlers(bot: telebot.TeleBot):
         ]
     )
     def handle_admin_buttons(message):
-        """Обработчик ТОЛЬКО админ кнопок"""
         text = message.text
         
         if text == "📊 Статистика":
@@ -223,48 +216,12 @@ def register_admin_handlers(bot: telebot.TeleBot):
 👇 Выберите для редактирования"""
             bot.send_message(message.chat.id, text, reply_markup=reminders_editor_menu(), parse_mode='Markdown')
 
-    # --- 3. СОСТОЯНИЯ РЕДАКТИРОВАНИЯ НАПОМИНАНИЙ ---
-    def save_day_reminder(message):
-        """Сохранить напоминание за день"""
-        if message.chat.id != settings.ANTON_CHAT_ID:
-            return
-        templates = get_custom_reminders()
-        templates['day_before'] = message.text
-        save_custom_reminders(templates)
-        bot.send_message(message.chat.id, "✅ За день обновлено!")
-        user_states.pop(message.chat.id, None)
-
-    def save_two_hours_reminder(message):
-        """Сохранить напоминание за 2 часа"""
-        if message.chat.id != settings.ANTON_CHAT_ID:
-            return
-        templates = get_custom_reminders()
-        templates['two_hours'] = message.text
-        save_custom_reminders(templates)
-        bot.send_message(message.chat.id, "✅ За 2 часа обновлено!")
-        user_states.pop(message.chat.id, None)
-
-    def save_evening_reminder(message):
-        """Сохранить напоминание 19:00"""
-        if message.chat.id != settings.ANTON_CHAT_ID:
-            return
-        templates = get_custom_reminders()
-        templates['evening'] = message.text
-        save_custom_reminders(templates)
-        bot.send_message(message.chat.id, "✅ 19:00 обновлено!")
-        user_states.pop(message.chat.id, None)
-
-    # Регистрируем функции для next_step_handler
-    bot.register_next_step_handler_by_chat_id = lambda chat_id, func: None  # Заглушка
-    # Функции сохраняются в глобальной области для доступа из register_next_step_handler
-
-    # --- 4. СОСТОЯНИЯ ДОБАВЛЕНИЯ/РАССЫЛКИ (НИЖНИЙ приоритет) ---
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID)
     def handle_admin_states(message):
         state_data = user_states.get(message.chat.id, {})
         state = state_data.get('state')
         if not state:
-            return  # НЕ отвечаем на обычные сообщения!
+            return
 
         if state == 'waiting_chat_id_link':
             chat_id_str = extract_chat_id(message.text)
@@ -318,3 +275,29 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 bot.send_message(message.chat.id, "❌ Ошибка рассылки")
             user_states.pop(message.chat.id, None)
             return
+
+    # Обработчики редактирования напоминаний
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_day_reminder')
+    def handle_edit_day(message):
+        templates = get_custom_reminders()
+        templates['day_before'] = message.text
+        save_custom_reminders(templates)
+        bot.send_message(message.chat.id, "✅ За день обновлено!")
+        user_states.pop(message.chat.id, None)
+
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_two_hours')
+    def handle_edit_2h(message):
+        templates = get_custom_reminders()
+        templates['two_hours'] = message.text
+        save_custom_reminders(templates)
+        bot.send_message(message.chat.id, "✅ За 2 часа обновлено!")
+        user_states.pop(message.chat.id, None)
+
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and user_states.get(m.chat.id, {}).get('state') == 'edit_evening')
+    def handle_edit_evening(message):
+        templates = get_custom_reminders()
+        templates['evening'] = message.text
+        save_custom_reminders(templates)
+        bot.send_message(message.chat.id, "✅ 19:00 обновлено!")
+        user_states.pop(message.chat.id, None)
+
