@@ -373,72 +373,161 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
     # --- Универсальный обработчик для состояний и редакторов ---
     # ВАЖНО: он должен быть ПОСЛЕ всех конкретных админ‑хендлеров
-    @bot.message_handler(
-        func=lambda m: m.chat.id == settings.ANTON_CHAT_ID
-    )
-    def handle_admin_states(message):
-        state_data = user_states.get(message.chat.id, {})
-        state = state_data.get('state')
+   # --- Универсальный обработчик для состояний и редакторов ---
+# ВАЖНО: он должен быть ПОСЛЕ всех конкретных админ‑хендлеров
+@bot.message_handler(
+    func=lambda m: m.chat.id == settings.ANTON_CHAT_ID
+)
+def handle_admin_states(message):
+    state_data = user_states.get(message.chat.id, {})
+    state = state_data.get('state')
 
-        if not state:
-            # Если нет состояния, ничего не делаем, чтобы не вызывать лишнее "Выберите действие"
-            return
+    if not state:
+        # Если нет состояния, ничего не делаем, чтобы не вызывать лишнее "Выберите действие"
+        return
 
-        templates = get_custom_reminders()
+    templates = get_custom_reminders()
 
-        # Редактирование напоминаний по тексту состояния
-        if state == 'edit_day_reminder':
-            templates['day_before'] = message.text
-            if save_custom_reminders(templates):
-                bot.send_message(
-                    message.chat.id,
-                    "✅ Напоминание за день обновлено!",
-                    reply_markup=back_keyboard()
-                )
-            user_states.pop(message.chat.id, None)
-            return
-
-        if state == 'edit_two_hours':
-            templates['two_hours'] = message.text
-            if save_custom_reminders(templates):
-                bot.send_message(
-                    message.chat.id,
-                    "✅ Напоминание за 2 часа обновлено!",
-                    reply_markup=back_keyboard()
-                )
-            user_states.pop(message.chat.id, None)
-            return
-
-        if state == 'edit_evening':
-            templates['evening'] = message.text
-            if save_custom_reminders(templates):
-                bot.send_message(
-                    message.chat.id,
-                    "✅ Напоминание 19:00 обновлено!",
-                    reply_markup=back_keyboard()
-                )
-            user_states.pop(message.chat.id, None)
-            return
-
-        # --- Кнопки редактора (текст с кнопок)
-        text_lower = message.text.lower()
-
-        if "редактировать день" in text_lower or "редактировать за день" in text_lower:
-            user_states[message.chat.id] = {'state': 'edit_day_reminder'}
+    # Редактирование напоминаний по тексту состояния
+    if state == 'edit_day_reminder':
+        templates['day_before'] = message.text
+        if save_custom_reminders(templates):
             bot.send_message(
                 message.chat.id,
-                f"📅 **За день**\n\n```{templates['day_before']}```\n\nНовый текст:",
-                parse_mode='Markdown'
+                "✅ Напоминание за день обновлено!",
+                reply_markup=back_keyboard()
             )
-            return
+        user_states.pop(message.chat.id, None)
+        return
 
-        if "редактировать 2 часа" in text_lower or "редактировать за 2" in text_lower:
-            user_states[message.chat.id] = {'state': 'edit_two_hours'}
+    if state == 'edit_two_hours':
+        templates['two_hours'] = message.text
+        if save_custom_reminders(templates):
             bot.send_message(
                 message.chat.id,
-                f"⏰ **За 2 часа**\n\n```{templates['two_hours']}```\n\nНовый текст:",
+                "✅ Напоминание за 2 часа обновлено!",
+                reply_markup=back_keyboard()
+            )
+        user_states.pop(message.chat.id, None)
+        return
+
+    if state == 'edit_evening':
+        templates['evening'] = message.text
+        if save_custom_reminders(templates):
+            bot.send_message(
+                message.chat.id,
+                "✅ Напоминание 19:00 обновлено!",
+                reply_markup=back_keyboard()
+            )
+        user_states.pop(message.chat.id, None)
+        return
+
+    # --- Кнопки редактора (текст с кнопок)
+    text_lower = message.text.lower()
+
+    if "редактировать день" in text_lower or "редактировать за день" in text_lower:
+        user_states[message.chat.id] = {'state': 'edit_day_reminder'}
+        bot.send_message(
+            message.chat.id,
+            f"📅 **За день**\n\n```{templates['day_before']}```\n\nНовый текст:",
+            parse_mode='Markdown'
+        )
+        return
+
+    if "редактировать 2 часа" in text_lower or "редактировать за 2" in text_lower:
+        user_states[message.chat.id] = {'state': 'edit_two_hours'}
+        bot.send_message(
+            message.chat.id,
+            f"⏰ **За 2 часа**\n\n```{templates['two_hours']}```\n\nНовый текст:",
+            parse_mode='Markdown'
+        )
+        return
+
+    if "редактировать 19" in text_lower or "редактировать вечер" in text_lower:
+        user_states[message.chat.id] = {'state': 'edit_evening'}
+        bot.send_message(
+            message.chat.id,
+            f"🌙 **19:00**\n\n```{templates['evening']}```\n\nНовый текст:",
+            parse_mode='Markdown'
+        )
+        return
+
+    # --- Добавление записи ---
+    if state == 'waiting_chat_id_link':
+        chat_id_str = extract_chat_id(message.text)
+        if not chat_id_str:
+            bot.send_message(message.chat.id, "❌ Не найден chat_id! Попробуйте еще раз.")
+            return
+        try:
+            chat_id = int(chat_id_str)
+            state_data['chat_id'] = chat_id
+            state_data['state'] = 'waiting_datetime'
+            user_states[message.chat.id] = state_data
+            bot.send_message(
+                message.chat.id,
+                f"✅ Chat ID: `{chat_id}`\n\n📅 Дата (ДД.ММ.ГГГГ ЧЧ:ММ):",
                 parse_mode='Markdown'
             )
-            return
+        except ValueError:
+            bot.send_message(message.chat.id, "❌ Неверный chat_id!")
+        return
 
-        if "редактировать 19" in text_lower or "редактировать вечер" in text
+    if state == 'waiting_datetime':
+        try:
+            booking_dt = datetime.strptime(message.text.strip(), '%d.%m.%Y %H:%M')
+            if booking_dt < datetime.now():
+                bot.send_message(message.chat.id, "❌ Дата в прошлом!")
+                return
+
+            with db_connection():
+                Booking.create(
+                    chat_id=state_data['chat_id'],
+                    username=f"user_{state_data['chat_id']}",
+                    datetime=booking_dt
+                )
+
+            schedule_exact_reminders(bot, state_data['chat_id'], booking_dt)
+            bot.send_message(
+                message.chat.id,
+                f"✅ Запись: `{state_data['chat_id']}` на {booking_dt.strftime('%d.%m %H:%M')}",
+                parse_mode='Markdown',
+                reply_markup=back_keyboard()
+            )
+            user_states.pop(message.chat.id, None)
+        except ValueError:
+            bot.send_message(message.chat.id, "❌ Формат: ДД.ММ.ГГГГ ЧЧ:ММ")
+        except Exception as e:
+            logger.error(f"Ошибка создания записи: {e}")
+            bot.send_message(message.chat.id, "❌ Ошибка создания записи!")
+        return
+
+    # --- Рассылка акций ---
+    if state == 'waiting_promo_message':
+        promo_text = message.text
+        with db_connection():
+            try:
+                clients = Booking.select(Booking.chat_id).distinct()
+                sent, failed = 0, 0
+                for client in clients:
+                    try:
+                        bot.send_message(
+                            client.chat_id,
+                            f"🎉 **АКЦИЯ!**\n\n{promo_text}",
+                            parse_mode='Markdown'
+                        )
+                        sent += 1
+                    except Exception as e:
+                        logger.error(f"Ошибка отправки рассылки клиенту {client.chat_id}: {e}")
+                        failed += 1
+
+                bot.send_message(
+                    message.chat.id,
+                    f"📢 Рассылка: {sent}✓ {failed}✗",
+                    reply_markup=back_keyboard()
+                )
+            except Exception as e:
+                logger.error(f"Ошибка рассылки: {e}")
+                bot.send_message(message.chat.id, "❌ Ошибка рассылки!")
+
+        user_states.pop(message.chat.id, None)
+        return
