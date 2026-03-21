@@ -43,9 +43,9 @@ def get_custom_reminders():
     except:
         pass
     return {
-        'day_before': '👋 Напоминаю! Завтра в {time} у Антона запись на татуировку 💉\n\n📲 Подтвердите или отмените: /yes или /no',
-        'two_hours': '⏰ Через 2 часа ваша запись у Антона! 💉\n\n⏰ {time}\n\nНе опаздывайте! 🚀',
-        'evening': '🌙 Напоминание на завтра!\n\n💉 Запись: {time}\n👨‍🎨 Мастер: Антон\n\nДо встречи! ✨'
+        'day_before': '👋 Напоминаю! Завтра в {time} у Антона запись на татуировку 💉\\n\\n📲 Подтвердите или отмените: /yes или /no',
+        'two_hours': '⏰ Через 2 часа ваша запись у Антона! 💉\\n\\n⏰ {time}\\n\\nНе опаздывайте! 🚀',
+        'evening': '🌙 Напоминание на завтра!\\n\\n💉 Запись: {time}\\n👨‍🎨 Мастер: Антон\\n\\nДо встречи! ✨'
     }
 
 def save_custom_reminders(templates):
@@ -93,7 +93,7 @@ def schedule_exact_reminders(bot, chat_id, booking_dt):
         templates = get_custom_reminders()
         text = templates['evening'].format(time=time_str)
         try:
-            bot.send_message(chat_id, f"{text}\n📅 {tomorrow}")
+            bot.send_message(chat_id, f"{text}\\n📅 {tomorrow}")
         except:
             pass
 
@@ -160,6 +160,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.send_message(message.chat.id, "❌ Доступ запрещен")
             return
         logger.info(f"✅ АДМИН КОМАНДА /admin от {message.chat.id}")
+        user_states.pop(message.chat.id, None)  # Очищаем состояние
         show_admin_panel(bot, message.chat.id)
 
     # 🔥 #2 АДМИНСКИЕ КНОПКИ (исключаем команды)
@@ -168,9 +169,13 @@ def register_admin_handlers(bot: telebot.TeleBot):
                         m.text in ADMIN_BUTTONS)
     def handle_admin_buttons(message):
         chat_id = message.chat.id
-        text = message.text
+        text = message.text.strip()  # ✅ ИСПРАВЛЕНО: убираем лишние пробелы
         
         logger.info(f"✅ АДМИН КНОПКА: '{text}' от {chat_id}")
+        
+        # Очищаем состояние перед новой операцией
+        if text != "❌ Выход из админки":
+            user_states.pop(chat_id, None)
         
         if text == "❌ Выход из админки":
             user_states.pop(chat_id, None)
@@ -192,8 +197,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
             return
         
         elif text == "➕ Добавить запись":
-            logger.info("🚀 ➕ Добавить запись")
-            user_states[chat_id] = {'state': 'waiting_chat_id_link'}
+            logger.info("🚀 ➕ Добавить запись - состояние установлено")
+            user_states[chat_id] = {'state': 'admin_waiting_chat_id'}  # ✅ ИСПРАВЛЕНО: уникальное состояние
             bot.send_message(
                 chat_id,
                 "📝 **Добавление записи**\n🔗 [@userinfo3bot](https://t.me/userinfo3bot)\nСкопируйте chat_id:",
@@ -231,53 +236,76 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.send_message(chat_id, msg, reply_markup=reminders_editor_menu(), parse_mode='Markdown')
             return
 
-    # 🔥 #3 СОСТОЯНИЯ АДМИНА
+    # 🔥 #3 СОСТОЯНИЯ АДМИНА - ✅ ПЕРЕПИСАНО ПОЛНОСТЬЮ
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and 
                         bool(user_states.get(m.chat.id, {}).get('state')))
     def handle_admin_states(message):
         chat_id = message.chat.id
-        state = user_states.get(chat_id, {}).get('state')
+        state_data = user_states.get(chat_id, {})
+        state = state_data.get('state')
         
-        logger.info(f"🔄 Админ состояние: {state}")
+        logger.info(f"🔄 Админ состояние: '{state}' от {chat_id}, текст: '{message.text}'")
         
-        if state == 'waiting_chat_id_link':
+        # ✅ ИСПРАВЛЕНО: добавлено состояние для chat_id
+        if state == 'admin_waiting_chat_id':
             chat_id_str = extract_chat_id(message.text)
             if not chat_id_str:
                 bot.send_message(chat_id, "❌ chat_id не найден!\nПример:\n`chat_id: -123456789`", 
                                parse_mode='Markdown', reply_markup=admin_exit_keyboard())
                 return
+            
             try:
                 client_id = int(chat_id_str)
-                user_states[chat_id]['chat_id'] = client_id
-                user_states[chat_id]['state'] = 'waiting_datetime'
-                bot.send_message(chat_id, f"✅ Chat ID: `{client_id}`\n📅 Дата (ДД.ММ.ГГГГ ЧЧ:ММ):", 
+                user_states[chat_id] = {
+                    'state': 'admin_waiting_datetime',
+                    'client_chat_id': client_id  # ✅ ИСПРАВЛЕНО: сохраняем client_chat_id
+                }
+                bot.send_message(chat_id, 
+                               f"✅ Chat ID: `{client_id}`\n📅 **Дата (ДД.ММ.ГГГГ ЧЧ:ММ):**\nПример: `25.12.2025 15:30`", 
                                parse_mode='Markdown', reply_markup=admin_exit_keyboard())
+                logger.info(f"✅ Переход к дате для client_id: {client_id}")
             except ValueError:
-                bot.send_message(chat_id, "❌ Неверный chat_id!", reply_markup=admin_exit_keyboard())
+                bot.send_message(chat_id, "❌ Неверный chat_id! Должен быть числом.", 
+                               reply_markup=admin_exit_keyboard())
             return
 
-        elif state == 'waiting_datetime':
+        elif state == 'admin_waiting_datetime':
             try:
+                # ✅ ИСПРАВЛЕНО: правильный формат даты
                 booking_dt = datetime.strptime(message.text.strip(), '%d.%m.%Y %H:%M')
                 if booking_dt < datetime.now():
-                    bot.send_message(chat_id, "❌ Дата в прошлом!", reply_markup=admin_exit_keyboard())
+                    bot.send_message(chat_id, "❌ Дата в прошлом! Выберите будущую дату.", 
+                                   reply_markup=admin_exit_keyboard())
                     return
 
-                with db_connection():
-                    Booking.create(chat_id=user_states[chat_id]['chat_id'], 
-                                 username=f"user_{user_states[chat_id]['chat_id']}", 
-                                 datetime=booking_dt.isoformat())
-                schedule_exact_reminders(bot, user_states[chat_id]['chat_id'], booking_dt)
+                client_chat_id = user_states[chat_id]['client_chat_id']
                 
-                bot.send_message(chat_id, f"✅ Запись `{user_states[chat_id]['chat_id']}` на {booking_dt.strftime('%d.%m %H:%M')}", 
-                               reply_markup=admin_exit_keyboard())
-                user_states.pop(chat_id, None)
+                with db_connection():
+                    Booking.create(
+                        chat_id=client_chat_id, 
+                        username=f"user_{client_chat_id}", 
+                        datetime=booking_dt.isoformat()
+                    )
+                
+                schedule_exact_reminders(bot, client_chat_id, booking_dt)
+                
+                success_msg = f"""✅ **Запись создана!**
+
+👤 Client ID: `{client_chat_id}`
+📅 Дата: {booking_dt.strftime('%d.%m.%Y %H:%M')}"""
+                
+                bot.send_message(chat_id, success_msg, parse_mode='Markdown', reply_markup=admin_exit_keyboard())
+                logger.info(f"✅ Запись создана: {client_chat_id} на {booking_dt}")
+                
+                user_states.pop(chat_id, None)  # Очищаем состояние
+                
             except ValueError:
-                bot.send_message(chat_id, "❌ Формат: `ДД.ММ.ГГГГ ЧЧ:ММ`\nПример: `25.12.2025 15:30`", 
+                bot.send_message(chat_id, 
+                               "❌ **Неверный формат даты!**\n`ДД.ММ.ГГГГ ЧЧ:ММ`\nПример: `25.12.2025 15:30`", 
                                parse_mode='Markdown', reply_markup=admin_exit_keyboard())
             except Exception as e:
-                logger.error(f"Ошибка записи: {e}")
-                bot.send_message(chat_id, "❌ Ошибка!", reply_markup=admin_exit_keyboard())
+                logger.error(f"Ошибка создания записи: {e}")
+                bot.send_message(chat_id, "❌ Ошибка создания записи!", reply_markup=admin_exit_keyboard())
             return
 
         elif state == 'waiting_promo_message':
@@ -327,3 +355,4 @@ def register_admin_handlers(bot: telebot.TeleBot):
 
     _admin_handlers_registered = True
     logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ!")
+
