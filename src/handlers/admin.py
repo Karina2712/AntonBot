@@ -36,6 +36,13 @@ def db_connection():
 reminder_scheduler = {}
 REMINDERS_FILE = "custom_reminders.json"
 
+def start_reminder_scheduler(bot):
+    """Запуск планировщика напоминаний"""
+    cleanup_thread = threading.Thread(target=cleanup_scheduler, daemon=True)
+    cleanup_thread.start()
+    logger.info("✅ Планировщик напоминаний запущен")
+
+
 
 def load_custom_reminders():
     if os.path.exists(REMINDERS_FILE):
