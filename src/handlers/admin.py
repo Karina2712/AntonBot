@@ -343,7 +343,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
             logger.error(f"Ошибка клиентского меню: {e}")
             bot.send_message(message.chat.id, "❌ Ошибка меню", reply_markup=back_keyboard())
 
-    # Универсальный хендлер для состояний
+    # ✅ КРИТИЧНЫЙ ФИКС: Универсальный хендлер для состояний ДО списков кнопок
     @bot.message_handler(
         func=lambda m: (
             m.chat.id == settings.ANTON_CHAT_ID and
@@ -378,9 +378,9 @@ def register_admin_handlers(bot: telebot.TeleBot):
             del user_states[message.chat.id]
             return
 
-        # Кнопки редактирования
+        # Кнопки редактирования (из reminders_editor_menu)
         text_lower = message.text.lower()
-        if "редактировать день" in text_lower:
+        if "редактировать день" in text_lower or "редактировать за день" in text_lower:
             user_states[message.chat.id] = {'state': 'edit_day_reminder'}
             bot.send_message(
                 message.chat.id,
@@ -388,7 +388,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 parse_mode='Markdown'
             )
             return
-        elif "редактировать 2 часа" in text_lower:
+        elif "редактировать 2 часа" in text_lower or "редактировать за 2" in text_lower:
             user_states[message.chat.id] = {'state': 'edit_two_hours'}
             bot.send_message(
                 message.chat.id,
@@ -396,7 +396,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 parse_mode='Markdown'
             )
             return
-        elif "редактировать 19" in text_lower:
+        elif "редактировать 19" in text_lower or "редактировать вечер" in text_lower:
             user_states[message.chat.id] = {'state': 'edit_evening'}
             bot.send_message(
                 message.chat.id,
@@ -486,3 +486,4 @@ def start_reminder_scheduler(bot):
     cleanup_thread = threading.Thread(target=cleanup_scheduler, daemon=True)
     cleanup_thread.start()
     logger.info("✅ Планировщик напоминаний запущен")
+
