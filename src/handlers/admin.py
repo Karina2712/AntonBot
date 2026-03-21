@@ -15,6 +15,23 @@ from services.stats import get_stats
 from peewee import SqliteDatabase
 from contextlib import contextmanager
 
+@bot.message_handler(commands=['start'], func=lambda m: m.chat.id == settings.ANTON_CHAT_ID)
+def admin_start(message):
+    """Старт админ-панели"""
+    text = """🚀 **АДМИН-ПАНЕЛЬ АНТОНБОТА**
+
+📊 Статистика | 📢 Рассылка акций
+➕ Добавить запись | 👥 Список клиентов  
+✏️ Редактировать рассылки"""
+    
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    markup.add("📊 Статистика", "📢 Рассылка акций")
+    markup.add("➕ Добавить запись", "👥 Список клиентов") 
+    markup.add("✏️ Редактировать рассылки")
+    
+    bot.send_message(message.chat.id, text, reply_markup=markup, parse_mode='Markdown')
+
+
 def register_admin_handlers(bot: telebot.TeleBot):
     """Регистрация всех админ-хендлеров"""
     # Проверка напоминаний при запуске
