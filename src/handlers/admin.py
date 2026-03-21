@@ -128,11 +128,23 @@ def reminders_editor_menu():
     markup.add(telebot.types.InlineKeyboardButton("❌ Назад", callback_data="admin_back"))
     return markup
 
-# ✅ СТРОГО ОГРАНИЧЕННЫЕ АДМИНСКИЕ КНОПКИ
+# ✅ АДМИНСКИЕ КНОПКИ (ТОЧНО ТАКИЕ ЖЕ)
 ADMIN_BUTTONS = {
     "📊 Статистика", "📢 Рассылка акций", "➕ Добавить запись", 
     "👥 Список клиентов", "✏️ Редактировать рассылки", "❌ Выход из админки"
 }
+
+def show_admin_panel(bot, chat_id):
+    """Показывает админ-панель с кнопками"""
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    row1 = ["📊 Статистика", "📢 Рассылка акций"]
+    row2 = ["➕ Добавить запись", "👥 Список клиентов"]
+    row3 = ["✏️ Редактировать рассылки", "❌ Выход из админки"]
+    
+    for row in [row1, row2, row3]:
+        markup.row(*row)
+    
+    bot.send_message(chat_id, "🔧 **АДМИН ПАНЕЛЬ АКТИВНА**", reply_markup=markup, parse_mode='Markdown')
 
 def register_admin_handlers(bot: telebot.TeleBot):
     global _admin_handlers_registered
@@ -143,48 +155,62 @@ def register_admin_handlers(bot: telebot.TeleBot):
     
     logger.info("🔧 Регистрация админ хендлеров...")
 
-    # 🔥 #1 АДМИНСКИЕ КНОПКИ - МАКСИМАЛЬНЫЙ ПРИОРИТЕТ
+
+    @bot.message_handler(commands=['admin'])
+    def admin_command(message):
+        if message.chat.id != settings.ANTON_CHAT_ID:
+            bot.send_message(message.chat.id, "❌ Доступ запрещен")
+            return
+        logger.info(f"✅ АДМИН КОМАНДА /admin от {message.chat.id}")
+        show_admin_panel(bot, message.chat.id)
+
+
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and m.text in ADMIN_BUTTONS)
     def handle_admin_buttons(message):
         chat_id = message.chat.id
+        text = message.text
         
-        logger.info(f"✅ АДМИН КНОПКА: {message.text}")
+        logger.info(f"✅ АДМИН КНОПКА НАЖАТА: '{text}' от chat_id={chat_id}")
         
-        if message.text == "❌ Выход из админки":
+        if text == "❌ Выход из админки":
             user_states.pop(chat_id, None)
             bot.send_message(chat_id, "✅ Админ режим отключен", reply_markup=back_keyboard())
             return
         
-        elif message.text == "📊 Статистика":
+        elif text == "📊 Статистика":
             try:
                 stats_text = get_stats()
                 bot.send_message(chat_id, stats_text, parse_mode='Markdown', reply_markup=admin_exit_keyboard())
-            except:
+            except Exception as e:
+                logger.error(f"Ошибка статистики: {e}")
                 bot.send_message(chat_id, "❌ Ошибка статистики", reply_markup=admin_exit_keyboard())
             return
         
-        elif message.text == "📢 Рассылка акций":
+        elif text == "📢 Рассылка акций":
             user_states[chat_id] = {'state': 'waiting_promo_message'}
             bot.send_message(chat_id, "📢 **Введите текст рассылки:**", parse_mode='Markdown', reply_markup=admin_exit_keyboard())
             return
         
-        elif message.text == "➕ Добавить запись":
+        elif text == "➕ Добавить запись":
+            logger.info("🚀 НАЖАТА КНОПКА '➕ Добавить запись'")
             user_states[chat_id] = {'state': 'waiting_chat_id_link'}
             bot.send_message(
                 chat_id,
                 "📝 **Добавление записи**\n🔗 [@userinfo3bot](https://t.me/userinfo3bot)\nСкопируйте chat_id:",
-                parse_mode='Markdown', disable_web_page_preview=True, reply_markup=admin_exit_keyboard()
+                parse_mode='Markdown', 
+                disable_web_page_preview=True, 
+                reply_markup=admin_exit_keyboard()
             )
             return
         
-        elif message.text == "👥 Список клиентов":
+        elif text == "👥 Список клиентов":
             try:
                 with db_connection():
                     bookings = Booking.select().order_by(Booking.datetime.desc()).limit(10)
                     if not bookings:
                         bot.send_message(chat_id, "📝 Нет записей", reply_markup=admin_exit_keyboard())
                         return
-                    clients_text = "👥 **ЗАПИСИ:**\n\n"
+                    clients_text = "👥 **ПОСЛЕДНИЕ ЗАПИСИ:**\n\n"
                     for booking in bookings:
                         booking_dt = safe_parse_datetime(booking.datetime)
                         dt_str = booking_dt.strftime('%d.%m %H:%M') if booking_dt else "[битая дата]"
@@ -195,7 +221,7 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 bot.send_message(chat_id, "❌ Ошибка списка", reply_markup=admin_exit_keyboard())
             return
         
-        elif message.text == "✏️ Редактировать рассылки":
+        elif text == "✏️ Редактировать рассылки":
             templates = get_custom_reminders()
             text = f"""✏️ **НАПОМИНАНИЯ:**
 
@@ -207,18 +233,17 @@ def register_admin_handlers(bot: telebot.TeleBot):
             bot.send_message(chat_id, text, reply_markup=reminders_editor_menu(), parse_mode='Markdown')
             return
 
-    # 🔥 #2 АДМИНСКИЕ СОСТОЯНИЯ - СТРОГО ПО STATE
     @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID and bool(user_states.get(m.chat.id, {}).get('state')))
     def handle_admin_states(message):
         chat_id = message.chat.id
         state = user_states.get(chat_id, {}).get('state')
         
-        logger.info(f"🔄 Админ состояние: {state}")
+        logger.info(f"🔄 Админ состояние: {state}, текст: '{message.text}'")
         
         if state == 'waiting_chat_id_link':
             chat_id_str = extract_chat_id(message.text)
             if not chat_id_str:
-                bot.send_message(chat_id, "❌ chat_id не найден!", reply_markup=admin_exit_keyboard())
+                bot.send_message(chat_id, "❌ chat_id не найден! Пример:\nchat_id: -123456789", reply_markup=admin_exit_keyboard())
                 return
             try:
                 client_id = int(chat_id_str)
@@ -226,8 +251,8 @@ def register_admin_handlers(bot: telebot.TeleBot):
                 user_states[chat_id]['state'] = 'waiting_datetime'
                 bot.send_message(chat_id, f"✅ Chat ID: `{client_id}`\n📅 Дата (ДД.ММ.ГГГГ ЧЧ:ММ):", 
                                parse_mode='Markdown', reply_markup=admin_exit_keyboard())
-            except:
-                bot.send_message(chat_id, "❌ Неверный chat_id!", reply_markup=admin_exit_keyboard())
+            except ValueError:
+                bot.send_message(chat_id, "❌ Неверный chat_id! Должен быть числом.", reply_markup=admin_exit_keyboard())
             return
 
         elif state == 'waiting_datetime':
@@ -238,17 +263,21 @@ def register_admin_handlers(bot: telebot.TeleBot):
                     return
 
                 with db_connection():
-                    Booking.create(chat_id=user_states[chat_id]['chat_id'], username=f"user_{user_states[chat_id]['chat_id']}", datetime=booking_dt.isoformat())
+                    Booking.create(
+                        chat_id=user_states[chat_id]['chat_id'], 
+                        username=f"user_{user_states[chat_id]['chat_id']}", 
+                        datetime=booking_dt.isoformat()
+                    )
                 schedule_exact_reminders(bot, user_states[chat_id]['chat_id'], booking_dt)
                 
                 bot.send_message(chat_id, f"✅ Запись `{user_states[chat_id]['chat_id']}` на {booking_dt.strftime('%d.%m %H:%M')}", 
                                reply_markup=admin_exit_keyboard())
                 user_states.pop(chat_id, None)
             except ValueError:
-                bot.send_message(chat_id, "❌ Формат: ДД.ММ.ГГГГ ЧЧ:ММ", reply_markup=admin_exit_keyboard())
+                bot.send_message(chat_id, "❌ Формат: ДД.ММ.ГГГГ ЧЧ:ММ\nПример: 25.12.2025 15:30", reply_markup=admin_exit_keyboard())
             except Exception as e:
                 logger.error(f"Ошибка записи: {e}")
-                bot.send_message(chat_id, "❌ Ошибка!", reply_markup=admin_exit_keyboard())
+                bot.send_message(chat_id, "❌ Ошибка создания записи!", reply_markup=admin_exit_keyboard())
             return
 
         elif state == 'waiting_promo_message':
@@ -287,10 +316,12 @@ def register_admin_handlers(bot: telebot.TeleBot):
             user_states.pop(chat_id, None)
             return
 
-    # 🔥 #3 АДМИНСКИЕ CALLBACK
+
     @bot.callback_query_handler(func=lambda call: call.message.chat.id == settings.ANTON_CHAT_ID)
     def handle_admin_callbacks(call):
         chat_id = call.message.chat.id
+        
+        logger.info(f"🔄 Админ callback: {call.data}")
         
         if call.data == 'admin_back':
             user_states.pop(chat_id, None)
@@ -319,10 +350,18 @@ def register_admin_handlers(bot: telebot.TeleBot):
             )
         bot.answer_callback_query(call.id)
 
-    _admin_handlers_registered = True
-    logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ - 100% БЕЗОПАСНО!")
+    @bot.message_handler(func=lambda m: m.chat.id == settings.ANTON_CHAT_ID)
+    def debug_admin_messages(message):
+        logger.info(f"🔍 АДМИН СООБЩЕНИЕ: '{message.text}' (не обработано другими хендлерами)")
 
-# ✅ В ГЛАВНОМ ФАЙЛЕ:
-# 1. register_admin_handlers(bot)  # ПЕРВЫМ!
-# 2. Затем все клиентские хендлеры
+    _admin_handlers_registered = True
+    logger.info("✅ АДМИН ХЕНДЛЕРЫ РЕГИСТРИРОВАНЫ - 100% РАБОТАЕТ!")
+
+# ✅ ГЛАВНЫЙ ФАЙЛ (main.py) - ПРАВИЛЬНЫЙ ПОРЯДОК:
+"""
+import telebot
+from admin_handlers import register_admin_handlers, start_reminder_scheduler
+from config.settings import settings
+
+bot = telebot.TeleBot(settings.TOKEN)
 
